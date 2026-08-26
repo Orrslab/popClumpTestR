@@ -1,0 +1,704 @@
+---
+title: "introduction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{introduction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+##devtools::install_github("yourusername/popClumpTestR")
+library(popClumpTestR)
+```
+
+# Introduction
+
+Enables simulating X-Y population point data to test robustness of methods to recognize clumpedness. Given Clumping Methods (CMs), it is possible to simulate many populations at different levels of clumping. Afterwards, it is possible to generate Large Random-like Population Distributions (LRPDs) of your CMs - a baseline for random populations of 100 individuals in high spatial randomness, enabling a distribution per CM of random values. A high percentile per CM is marked as a Minimum Non-Random Threshold (MNRT), and a Non-Random Percent (NRP) of the simulation data is then calculated. Display functions (using ggplot2) then enable to qualitatvely ascertain which CMs are good enough, with differentiabilty of NRPs at different levels of clumping, and also to ascertain a minimum sample size.
+Note that the locations of simulations and example data are in Israel Transverse Mercator (ITM) - https://en.wikipedia.org/wiki/Israeli_Transverse_Mercator. This is to simulate localized coordinates - but technically any localized coordinate system will do.
+
+# Process
+
+1.  Create some R file with all your clumping methods (CMs) and helper functions - CMs used in the paper are available below
+
+```{r, eval=FALSE}
+library(spatstat)
+
+transform_df_to_ppp <- function(individual.locations.data.frame, polygons) {
+  pts <- individual.locations.data.frame[,c('X','Y')]
+  ##sp::coordinates(pts) <- ~X+Y
+  
+  pts <- sfheaders::sf_point(pts)
+  
+  ## spatstat polygons is expected to be reversed
+  wanted_poly<-cbind(rev(sf::st_coordinates(polygons[[1]])[,1]),rev(sf::st_coordinates(polygons[[1]])[,2]))
+  
+  ppps <- ppp(sf::st_coordinates(pts)[,1],sf::st_coordinates(pts)[,2],poly=wanted_poly)
+  
+  return(ppps)
+}
+
+ripleys.k <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  A <- sum(unlist(lapply(polygons, function(x) sf::st_area(x))))
+  n <- length(individual.locations.data.frame$X)
+  r <- 0.5 * ( A/ n)^ 0.5 
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  ret<-spatstat.explore::Kest(ppps, r = c(0,r), correction = 'isotropic')
+  retval <- ret$iso[2]/(pi*r^2)
+  return(retval)
+}
+
+ripleys.k.natural <- function(individual.locations.data.frame, polygons, n.for.calc){
+  
+  A <- sum(unlist(lapply(polygons, function(x) sf::st_area(x))))
+  n <- length(individual.locations.data.frame$X)
+  r <- ( A/ n)^ 0.5 
+  mult <- A/n^2
+  k <- 0
+  
+  for(i in 1:(length(individual.locations.data.frame$X)-1)){
+    p1 <- individual.locations.data.frame[i,]
+    for(j in (i+1):length(individual.locations.data.frame$X)){
+      p2 <- individual.locations.data.frame[j,]
+      curr_dist <- ((p1$X-p2$X)^2 + (p1$Y-p2$Y)^2)^0.5
+      if(curr_dist<=r){
+        k <- k+1
+      }
+    }
+  }
+  
+  k<-k/n
+  
+  return(k)
+}
+
+ripleys.k.uniform.dist <- function(individual.locations.data.frame, polygons, n.for.calc){
+  
+  A <- sum(unlist(lapply(polygons, function(x) sf::st_area(x))))
+  n <- length(individual.locations.data.frame$X)
+  r <- ( A/ n)^ 0.5 
+  mult <- A/(n*(n-1))
+  k <- 0
+  
+  study_area <- sf::st_union(do.call(c, polygons))  
+  
+  for(i in 1:length(individual.locations.data.frame$X)){
+    p1 <- individual.locations.data.frame[i,]
+    
+    p <- sf::st_sfc(
+      sf::st_point(c(p1$X, p1$Y)),
+      crs = sf::st_crs(study_area)
+    )
+    
+    circle <- sf::st_buffer(p, r)
+    
+    A_i <- as.numeric(sf::st_area(
+      sf::st_intersection(circle, study_area)
+    ))
+    
+    for(j in 1:length(individual.locations.data.frame$X)){
+      if(i!=j){
+        p2 <- individual.locations.data.frame[j,]
+        curr_dist <- ((p1$X-p2$X)^2 + (p1$Y-p2$Y)^2)^0.5
+        if(curr_dist<=r){
+          k <- k+1/A_i
+        }
+      }
+    }
+  }
+  
+  k<-mult*k
+  
+  return(k)
+}
+
+
+ripleys.k.rand.dist <- function(individual.locations.data.frame, polygons, n.for.calc){
+  
+  A <- sum(unlist(lapply(polygons, function(x) sf::st_area(x))))
+  n <- length(individual.locations.data.frame$X)
+  r <- 0.5 * ( A/ n)^ 0.5 
+  mult <- A/(n*(n-1))
+  k <- 0
+  
+  study_area <- sf::st_union(do.call(c, polygons))  
+  
+  for(i in 1:length(individual.locations.data.frame$X)){
+    p1 <- individual.locations.data.frame[i,]
+    
+    p <- sf::st_sfc(
+      sf::st_point(c(p1$X, p1$Y)),
+      crs = sf::st_crs(study_area)
+    )
+    
+    circle <- sf::st_buffer(p, r)
+    
+    A_i <- as.numeric(sf::st_area(
+      sf::st_intersection(circle, study_area)
+    ))
+    
+    for(j in 1:length(individual.locations.data.frame$X)){
+      if(i!=j){
+        p2 <- individual.locations.data.frame[j,]
+        curr_dist <- ((p1$X-p2$X)^2 + (p1$Y-p2$Y)^2)^0.5
+        if(curr_dist<=r){
+          k <- k+1/A_i
+        }
+      }
+    }
+  }
+  
+  k<-mult*k
+  
+  return(k)
+}
+
+clark.evans.median <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  clarkevans.res <- spatstat.explore::clarkevans(ppps)
+  
+  ce.by.mean <- clarkevans.res[1]
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  mean.nndist <- mean(nndists)
+  median.nndist <- median(nndists)
+  
+  ret <- -median.nndist * ce.by.mean / mean.nndist
+  
+  
+  return(ret)
+}
+
+clark.evans.trimmed.mean <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  clarkevans.res <- spatstat.explore::clarkevans(ppps)
+  
+  ce.by.mean <- clarkevans.res[1]
+  
+  cutoff <- 0.96 # make sure not divisible
+  
+  nndists <- sort(spatstat.geom::nndist(ppps))
+  mean.nndist <- mean(nndists)
+  
+  end <- min(length(nndists)-1,round(cutoff*length(nndists)))
+  
+  nndists.cutoff <- nndists[1:end]
+  nndists.cutoff.mean <- mean(nndists.cutoff)
+
+  ret <- -nndists.cutoff.mean * ce.by.mean / mean.nndist
+  
+  
+  return(ret)
+}
+
+clark.evans.ses <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  exp.sd <- sqrt(area/nrow(individual.locations.data.frame))/sqrt(2) ## CE divides it by 2, so root 2 is sd
+  exp.mean <- sqrt(area/nrow(individual.locations.data.frame))/2
+  
+  ret <- -(mean(nndists) - exp.mean) / exp.sd
+  
+  
+  return(ret)
+}
+
+clark.evans.sd <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  dist <- sqrt(area/nrow(individual.locations.data.frame))/sqrt(2) ## CE divides it by 2, so root 2 is sd
+  
+  ret <-  sd(nndists) / dist
+  
+  
+  return(ret)
+}
+
+clark.evans.sd <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  dist <- sqrt(area/nrow(individual.locations.data.frame))/sqrt(2) ## CE divides it by 2, so root 2 is sd
+  
+  ret <-  sd(nndists) / dist
+  
+  
+  return(ret)
+}
+
+clark.evans.trimmed.sd <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  cutoff <- 0.96 # make sure not divisible
+  
+  nndists <- sort(spatstat.geom::nndist(ppps))
+
+  end <- min(length(nndists)-1,round(cutoff*length(nndists)))
+  
+  nndists.cutoff <- nndists[1:end]
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  dist <- sqrt(area/nrow(individual.locations.data.frame))/sqrt(2) ## CE divides it by 2, so root 2 is sd
+  
+  ret <- sd(nndists.cutoff)/dist
+  
+  
+  return(ret)
+}
+
+nfun <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  dist <- sqrt(area/nrow(individual.locations.data.frame))/2 ## CE divides it by 2!
+  
+  val_of_min <- (max(nndists)-min(nndists))/mean(nndists)
+  val <- sum(val_of_min > 1.5)/length(nndists)
+  
+  val <- abs(mean(nndists) - median(nndists))
+  
+  return(val_of_min)
+}
+
+
+clump.pct <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  area <- sf::st_area(polygons[[1]])
+  
+  dist <- sqrt(area/nrow(individual.locations.data.frame))/2 ## CE divides it by 2!
+  
+  ret <- sum(nndists <= dist) / length(nndists)
+  
+  
+  return(ret)
+}
+
+clark.evans.naive <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  clarkevans.res <- spatstat.explore::clarkevans(ppps)
+  return(-clarkevans.res[1])
+}
+
+clark.evans.naive.orig <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  clarkevans.res <- spatstat.explore::clarkevans(ppps)
+  return(clarkevans.res[1])
+}
+
+clark.evans.cdf <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  clarkevans.res <- spatstat.explore::clarkevans(ppps)
+  return(-clarkevans.res[2])
+}
+
+quadrat.test.statistic <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  if(n.for.calc == 0 ){
+    n.for.calc <- nrow(individual.locations.data.frame)
+  }
+  qtest<-spatstat.explore::quadrat.test(ppps,method='M', nx=floor(sqrt(n.for.calc)), ny=floor(sqrt(n.for.calc)))
+  
+  return(qtest$p.value)
+}
+
+nndist.test.tailored <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+  
+  if(n.for.calc == 0 ){
+    n.for.calc <- nrow(individual.locations.data.frame)
+  }
+  
+  nndists <- spatstat.geom::nndist(ppps)
+  
+  exp.dist <- sqrt(sf::st_area(polygons[[1]])/nrow(individual.locations.data.frame))
+  
+  dists <- c()
+  
+  for(i in 1:(nrow(individual.locations.data.frame)-1)){
+    ind.1 <- individual.locations.data.frame[i,]
+    for(j in (i+1):nrow(individual.locations.data.frame)){
+      ind.2 <- individual.locations.data.frame[j,]
+      dist <- sqrt((ind.1$X-ind.2$X)^2+(ind.1$Y-ind.2$Y)^2)
+      dists <- c(dists, dist)
+    }
+  }
+  
+  nnndists <- dists[!dists %in% nndists]
+
+  alpha.nnndists <- (mean(nnndists)^2)/var(nnndists)
+  theta.nnndists <- var(nnndists)/mean(nnndists)
+  
+  alpha.dists <- (mean(dists)^2)/var(dists)
+  theta.dists <- var(dists)/mean(dists)
+  
+  
+  return(mean(nnndists)/mean(nndists))
+}
+
+quadrat.test.tailored <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  ppps <- transform_df_to_ppp(individual.locations.data.frame, polygons)
+
+  if(n.for.calc == 0 ){
+    n.for.calc <- nrow(individual.locations.data.frame)
+  }
+  qcount<- as.data.frame(spatstat.geom::quadratcount(ppps, nx=floor(sqrt(n.for.calc)), ny=floor(sqrt(n.for.calc))))
+
+  ratio.zero.quadrats <- sum(qcount$Freq %in% 0)/nrow(qcount)
+  
+  val <- 1-min(mean(qcount$Freq)/var(qcount$Freq),1)
+  
+  return(ratio.zero.quadrats)
+}
+
+exp.dist.cnt <- function(individual.locations.data.frame, polygons, n.for.calc) {
+  
+  nndists <- c()
+  fndists <- c()
+  
+  exp.dist <- sqrt(sf::st_area(polygons[[1]])/nrow(individual.locations.data.frame))
+  
+  for(i in 1:length(individual.locations.data.frame$X)){
+    p1 <- individual.locations.data.frame[i,]
+    curr.min <- NaN
+    curr.max <- NaN
+    for(j in 1:length(individual.locations.data.frame$X)){
+      if(i==j) next
+      p2 <- individual.locations.data.frame[j,]
+      curr_dist <- ((p1$X-p2$X)^2 + (p1$Y-p2$Y)^2)^0.5
+      
+      if(is.nan(curr.min) || curr.min > curr_dist){
+        curr.min <- curr_dist
+      }
+      
+      if(is.nan(curr.max) || curr.max < curr_dist){
+        curr.max <- curr_dist
+      }
+    }
+    nndists <- c(nndists, curr.min)
+    fndists <- c(fndists, curr.max)
+  }
+  
+  return(1-mean(nndists)/mean(fndists))
+}
+```
+
+2.  Create polygon list for your simulation - example using bird.location.data below
+
+```{r, eval=FALSE}
+l63 <- bird.location.data[bird.location.data$POPULATION == 'Spur-winged Lapwing 63',]
+  
+polys <- generate_simulation_polygons(l63, use_bounding_rect = F)
+  
+```
+
+3.  Create vector of the CM names and helper function names. Optional - test your CMs ahead of time to see if they are valid CMs
+
+```{r, eval=FALSE}
+
+  function_names = c(
+    'ripleys.k',
+    'clark.evans.naive',
+    'clark.evans.naive',
+    'clark.evans.trimmed.mean',
+    'clark.evans.median',
+    'clark.evans.cdf',
+    'clump.pct'
+    #'ripleys.k.natural',
+    #'clark.evans.sd',
+    #'clark.evans.trimmed.sd'
+    #'quadrat.test.tailored'
+    #'quadrat.test.statistic'
+    #'nfun'
+  )
+  
+  helper_funcs = c(
+          'transform_df_to_ppp', 
+          'ppp',
+          'nndist'
+          )
+  
+  check_clumping_method_validity(polys, 'ripleys.k')
+```
+
+4.  Suggested - run simulation process + LRPD process on a small Initial sample size (ISS) + large jumps in Degree of Clumping (DOC, suggested 20) + large jump in removed individuals per level (suggested around 5 individuals per level) + 100 repetitions. This is to test generally if your CM is a good one, and merits running on finer levels.
+
+```{r, eval=FALSE}
+set.seed(45)
+
+wanted.sim.type <- simulation_type$uniform.to.random ## for example, see types
+wanted.uniform.generation.type <- uniform_random_generation_type$split.polygon.and.generate.separately
+
+  
+start = Sys.time()
+heatmap.data<-simulate_population_remove_from_original_for_smaller_pops(
+  polys,   
+  function_names,                                                               
+  helper_funcs,
+  sim.type = wanted.sim.type, ## wanted simulation type
+  uniform.random.generation.type = wanted.uniform.generation.type, ## for uniform end if used
+  uniform.noise.ratio = 0.1, ## noise for uniform generation if relevant
+  initial_n = 30, # ISS
+  percent_random_rise = 20, # DOC (Degree of clumping). 20 means 6 levels - 100%, 80%, 60%, 40%, 20%, and 0% clumped.
+  delt_n = 5, # Number of Individuals to remove per level   
+  simulations_per_percent = 100, # Repetitions per ISS + DOC
+  recalculate_poly=T, #recalculate polygon for remaining individuals at each step
+  recalculate_poly_with_rect=F, #use the real MCP and not the bounding rect
+  plotResults = F, # Whether to display some of the populations 
+  ns_to_plot = c(30), #if above is set to TRUE, which Current Sample Size (CSS) to display
+  initial_div = 2, ## optional control parameter - closeness of individuals within clumps                                 
+  n_clumps = 0, ## optional control parameter - number of clumps. Default for 0 is sqrt(ISS)
+  n_cores = 0 ## default - use all but one of physical cores
+  )
+
+end = Sys.time()
+print('Initial simulation generation took:')
+print(end-start)
+
+  
+heatmap.to.use <- heatmap.data
+  
+n.for.calc <- max(heatmap.to.use$css) ## to set baseline level of clumping for the potentially larger LRPDs (100 individuals by default)
+  
+start = Sys.time()
+lrpd.data <- generate_large_randomlike_population_distribution(polys,
+                                                function_names,
+                                                helper_funcs,
+                                                sim.type = wanted.sim.type,
+                                                uniform.random.generation.type = wanted.uniform.generation.type
+                                                uniform.noise.ratio = 0.1,
+                                                n.for.calc = n.for.calc,
+                                                n.for.clumping = n.for.calc,
+                                                max_pct_to_use=20, 
+                                                percent_random_rise = 5,
+                                                simulations_per_percent=100,
+                                                recalculate_poly=T, #recalculate polygon for remaining individuals at each step
+                                                recalculate_poly_with_rect=F, #use the real MCP and not the bounding rect
+                                                n_cores = 0 ## default - use all but one of physical cores
+                                                )
+  
+lrpd.to.use <- lrpd.data
+end = Sys.time()
+print('Initial LRPD generation took:')
+print(end-start)
+```
+
+5.  Display the data to ascertain if your CMs are good for the finer process which takes longer - various display options below.
+
+```{r, eval=FALSE}
+## Initial plots to understand general logic. Read documentation.
+  heatmap_control_plots(heatmap.to.use, lrpd.to.use, wanted_n = 0, 
+                        just_hist = F,
+                        with_mnrt = T)
+  
+## aggregate simulation data and calculate NRP per CM with the MNRT of the LRPD.
+  aggregated.nrp.data <- calculate_nonrandom_percent_on_heatmap_data(heatmap.to.use,lrpd.to.use,
+                                                   upperPercentile=0.95,
+                                                   d_cutoff = c(0, 5, 10, 15, 20))
+
+  
+## display function to decide which CM to continue with - read documentation
+  plts <- plot_simulation_data(aggregated.nrp.data, 
+                       ##wanted_ns = c(1:10),
+                       wanted_ds = 20*0:5,
+                       use.nrp = T,
+                       doHeatmaps = T,  
+                       doLinePlots = T, 
+                       doFlippedLinePlots = F,
+                       fname.in.title=T,
+                       #AOI = NULL,
+                       #AOI = c(7, 50, 30, 100),
+                       AOI = c(7,-100,10,100),
+                       linewidth.for.AOI = 1,
+                       grep.pretty.name.non.random.percent = 'Rejection Rate',
+                       linewidth.lineplot = 1,
+                       lineplot.min.color = 'blue',
+                       lineplot.max.color = 'red')
+```
+
+6.  Can now run the entire process with finer levels - more DOC and/or less removed individuals and/or more repetitions and/or higher ISS. Example below with DOC drops of 5%, 1 individual removed per level, ISS=30, and 100 repetitions. 
+**Note:** runtime may be high despite parallelism. Have tested all number of cores on i7 - anything above 5 cores incurred similar runtime. Also tested on linux with PTHREAD instead - only sped up the coarser stage (step 4) from around 1.5 minutes to 40 seconds - finer stage took the same time. 
+When done, can repeat step 5 to display at a finer level.
+
+```{r, eval=FALSE}
+set.seed(45)
+
+wanted.sim.type <- simulation_type$uniform.to.random ## for example, see types
+wanted.uniform.generation.type <- uniform_random_generation_type$split.polygon.and.generate.separately
+
+  
+start = Sys.time()
+heatmap.data<-simulate_population_remove_from_original_for_smaller_pops(
+  polys,   
+  function_names,                                                               
+  helper_funcs,
+  sim.type = wanted.sim.type, ## wanted simulation type
+    uniform.random.generation.type = wanted.uniform.generation.type, ## for uniform end if used
+  uniform.noise.ratio = 0.1, ## noise for uniform generation if relevant
+  initial_n = 30, # ISS
+  percent_random_rise = 5, # DOC (Degree of clumping). 20 means 6 levels - 100%, 80%, 60%, 40%, 20%, and 0% clumped.
+  delt_n = 1, # Number of Individuals to remove per level   
+  simulations_per_percent = 100, # Repetitions per ISS + DOC
+  recalculate_poly=T, #recalculate polygon for remaining individuals at each step
+  recalculate_poly_with_rect=F, #use the real MCP and not the bounding rect
+  plotResults = F, # Whether to display some of the populations 
+  ns_to_plot = c(30), #if above is set to TRUE, which Current Sample Size (CSS) to display
+  initial_div = 2, ## optional control parameter - closeness of individuals within clumps                                 
+  n_clumps = 0, ## optional control parameter - number of clumps. Default for 0 is sqrt(ISS)
+  n_cores = 0 ## default - use all but one of physical cores
+  )
+
+end = Sys.time()
+print('Initial simulation generation took:')
+print(end-start)
+
+  
+heatmap.to.use <- heatmap.data
+  
+n.for.calc <- max(heatmap.to.use$css) ## to set baseline level of clumping for the potentially larger LRPDs (100 individuals by default)
+  
+start = Sys.time()
+lrpd.data <- generate_large_randomlike_population_distribution(polys,
+                                                function_names,
+                                                helper_funcs,
+                                                sim.type = wanted.sim.type,
+                                                  uniform.random.generation.type = wanted.uniform.generation.type, ## for uniform end if used
+                                                uniform.noise.ratio = 0.1,
+                                                n.for.calc = n.for.calc,
+                                                n.for.clumping = n.for.calc,
+                                                max_pct_to_use=20, 
+                                                percent_random_rise = 5,
+                                                simulations_per_percent=100,
+                                                recalculate_poly=T, #recalculate polygon for remaining individuals at each step
+                                                recalculate_poly_with_rect=F, #use the real MCP and not the bounding rect
+                                                n_cores = 0 ## default - use all but one of physical cores
+                                                )
+  
+lrpd.to.use <- lrpd.data
+end = Sys.time()
+print('Initial LRPD generation took:')
+print(end-start)
+```
+
+7.  Optional - can use attached example data bird.location.data to compare your CMs with several helpful display functions.
+
+```{r, eval=FALSE}
+bird_data_with_values <- calculate_values_example_data(bird.location.data, function_names)
+
+cutoffs_per_cm <- c(20, 9, 23, 7, 10) ## NOTE - need a cutoff for each CM, based on the smallest CSS (current sample size) for which your CM was still differentiable.
+
+## various options for display here - read the documentation.
+  plots_of_example_data(bird_data_with_values, lrpd.to.use, cutoffs_per_cm, 
+                        withSimData = F, withGradient = F, numericCutoffsForGradient = c(-2.4,-1))
+  
+  
+# validation of clumped-random half range
+{
+  library(ggplot2)
+  
+  pops.sim <- c()
+  rand.vals <- c()
+  uni.vals <- c()
+  for(pop in unique(bird.location.data$POPULATION)) {
+    
+    p <- bird.location.data[bird.location.data$POPULATION==pop,]
+    
+    rect <- generate_simulation_polygons(p, use_bounding_rect = T)
+    res<- lapply(1:1000,function(i) {
+      pop <- generate_random_population(nrow(p),rect)
+      polys2 <- generate_simulation_polygons(pop, use_bounding_rect = F)
+      rand.val <- clark.evans.trimmed.mean(pop,polys2,0)
+      rand.noise <- sample(5:25,1) / 100
+      pop <- generate_uniform_population(nrow(p), rect, noise.ratio = rand.noise)
+      polys2 <- generate_simulation_polygons(pop, use_bounding_rect = F)
+      uniform.val <- clark.evans.trimmed.mean(pop,polys2,0)
+      return(list(rand.val=rand.val, uniform.val=uniform.val))
+    })
+    
+    # res<- lapply(1:1000,function(i) {
+    #   #pop <- generate_random_population(nrow(p),rect)
+    #   #polys2 <- generate_simulation_polygons(pop, use_bounding_rect = F)
+    #   rand.noise <- sample(5:25,1) / 100
+    #   pop <- generate_uniform_population(nrow(p), rect, noise.ratio = rand.noise)
+    #   polys2 <- generate_simulation_polygons(pop, use_bounding_rect = F)
+    #   dist <- sqrt(sf::st_area(polys2[[1]]) / nrow(p))
+    #   return(dist)
+    # })
+    
+    rand.vals.curr <- unlist(lapply(res, function(x) {x$rand.val}))
+    uniform.vals.curr <- unlist(lapply(res, function(x) {x$uniform.val}))
+    
+    pops.sim <- c(pops.sim, rep(pop,1000))
+    rand.vals <- c(rand.vals, rand.vals.curr)
+    uni.vals <- c(uni.vals, uniform.vals.curr)
+  }
+  
+  sim.results <- data.frame(pop=pops.sim, rand.vals=rand.vals, uniform.vals=uni.vals)
+  
+  rand.uni.pop.tests <- rbind(cbind('Random',sim.results[,c(1,2)]))
+  colnames(rand.uni.pop.tests) <- c('type','pop','TMCEI')
+  
+  rand.uni.pop.tests.uni <- rbind(cbind('Uniform',sim.results[,c(1,3)]))
+  colnames(rand.uni.pop.tests.uni) <- c('type','pop','TMCEI')
+  
+  rand.uni.pop.tests <- rbind(rand.uni.pop.tests, rand.uni.pop.tests.uni)
+  
+  pops <- c()
+  val <- c()
+  ps.rand <- c()
+  ps.uni <- c()
+  for(pop in unique(rand.uni.pop.tests$pop)) {
+    
+    p <-bird.location.data[bird.location.data$POPULATION == pop,]
+    polys <- generate_simulation_polygons(p, use_bounding_rect = F)
+    rect <- generate_simulation_polygons(p, use_bounding_rect = T)
+    real.val <- clark.evans.trimmed.mean(p,polys,0)
+    print(paste(pop, real.val))
+    
+    sub <- rand.uni.pop.tests[rand.uni.pop.tests$pop==pop,]
+    rand.vals <- sub[sub$type=='Random',]$TMCEI
+    uniform.vals <- sub[sub$type=='Uniform',]$TMCEI
+    
+    p.rand<-sum(rand.vals<real.val)/length(rand.vals)
+    p.uni<-sum(uniform.vals<real.val)/length(uniform.vals)
+
+    pops <- c(pops, pop)
+    val <- c(val, real.val)
+    ps.rand <- c(ps.rand,p.rand)
+    ps.uni <- c(ps.uni,p.uni)
+
+    plt <- ggplot(sub,aes(x=TMCEI, fill=type)) + geom_histogram() +
+      geom_vline(xintercept = real.val) + labs(title=paste(pop,', p.rand=',round(p.rand,3),', p.uni=',round(p.uni,3))) + theme_classic()
+    print(plt)
+  }
+    
+  
+  pop.rand.uni.comp.results <- data.frame(pop=pops,TMCEI=val,p.val.rand=ps.rand,p.val.uni=ps.uni)
+}
+
+```

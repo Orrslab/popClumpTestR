@@ -1,0 +1,33 @@
+Package: popClumpTestR
+Title: Qualitatively Test and Display Robustness of Methods to Recognize Clumping On Simulated X-Y Population Location Data
+Version: 2.1.0
+Authors@R: c(
+    person("Roi", "Gerstel", email="roizoomsc@gmail.com", role = c("aut", "cre")),
+    person("Orr", "Spiegel", email="orrspiegel2024@gmail.com", role = c("aut"))
+    )
+Description: Enables simulating X-Y population point data to test robustness of methods to recognize clumpedness.
+    Given Clumping Methods (CMs), it is possible to simulate many populations at different levels of clumping.
+    Afterwards, it is possible to generate Large Random-like Population Distributions (LRPDs) of your CMs - a baseline
+    for random populations of 100 individuals in high spatial randomness, enabling a distribution per CM of random values. A high percentile per CM is marked as a
+    Minimum Non-Random Threshold (MNRT), and a Non-Random Percent (NRP) of the simulation data is then calculated.
+    Display functions (using ggplot2) then enable to qualitatvely ascertain which CMs are good enough, with differentiabilty
+    of NRPs at different levels of clumping, and also to ascertain a minimum sample size.
+    Note that the locations of simulations and example data are in Israel Transverse Mercator (ITM) - 
+    https://en.wikipedia.org/wiki/Israeli_Transverse_Mercator. This is to simulate localized coordinates - but technically any localized coordinate system will do.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports:
+    ggplot2,
+    parallel,
+    sf,
+    sfheaders,
+    grid	
+Depends: 
+    R (>= 3.5)
+LazyData: true
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/roxygen2/version: 8.0.0
