@@ -1,16 +1,16 @@
 Package: popClumpTestR
 Title: Qualitatively Test and Display Robustness of Methods to Recognize Clumping On Simulated X-Y Population Location Data
-Version: 2.1.0
+Version: 2.1.1
 Authors@R: c(
     person("Roi", "Gerstel", email="roizoomsc@gmail.com", role = c("aut", "cre")),
     person("Orr", "Spiegel", email="orrspiegel2024@gmail.com", role = c("aut"))
     )
 Description: Enables simulating X-Y population point data to test robustness of methods to recognize clumpedness.
-    Given Clumping Methods (CMs), it is possible to simulate many populations at different levels of clumping.
-    Afterwards, it is possible to generate Large Random-like Population Distributions (LRPDs) of your CMs - a baseline
-    for random populations of 100 individuals in high spatial randomness, enabling a distribution per CM of random values. A high percentile per CM is marked as a
+    Given Quantification Methods (QMs), it is possible to simulate many populations at different levels of clumping.
+    Afterwards, it is possible to generate Large Random-like Population Distributions (LRPDs) of your QMs - a baseline
+    for random populations of 100 individuals in high spatial randomness, enabling a distribution per QM of random values. A high percentile per QM is marked as a
     Minimum Non-Random Threshold (MNRT), and a Non-Random Percent (NRP) of the simulation data is then calculated.
-    Display functions (using ggplot2) then enable to qualitatvely ascertain which CMs are good enough, with differentiabilty
+    Display functions (using ggplot2) then enable to qualitatively ascertain which QMs are good enough, with differentiability
     of NRPs at different levels of clumping, and also to ascertain a minimum sample size.
     Note that the locations of simulations and example data are in Israel Transverse Mercator (ITM) - 
     https://en.wikipedia.org/wiki/Israeli_Transverse_Mercator. This is to simulate localized coordinates - but technically any localized coordinate system will do.
@@ -22,7 +22,7 @@ Imports:
     parallel,
     sf,
     sfheaders,
-    grid	
+    grid
 Depends: 
     R (>= 3.5)
 LazyData: true

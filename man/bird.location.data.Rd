@@ -11,7 +11,7 @@ A data frame with 247 rows (of 18 populations of 17 avian species) and 3 columns
 \describe{
 \item{POPULATION}{Population name, in format "SPECIES AMOUNT"}
 \item{X}{X of centroid of the individual (in ITM)}
-\item{X}{Y of centroid of the individual (in ITM)}
+\item{Y}{Y of centroid of the individual (in ITM)}
 ...
 }
 }
