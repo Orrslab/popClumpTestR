@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 ```
 
 ```{r setup}
-devtools::install_github("Orrslab/popClumpTestR")
+devtools::install_github("Orrslab/popClumpTestR", build_vignettes = TRUE)
 library(popClumpTestR)
 ```
 

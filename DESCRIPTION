@@ -1,6 +1,6 @@
 Package: popClumpTestR
 Title: Qualitatively Test and Display Robustness of Methods to Recognize Clumping On Simulated X-Y Population Location Data
-Version: 2.1.1
+Version: 2.1.2
 Authors@R: c(
     person("Roi", "Gerstel", email="roizoomsc@gmail.com", role = c("aut", "cre")),
     person("Orr", "Spiegel", email="orrspiegel2024@gmail.com", role = c("aut"))
