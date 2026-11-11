@@ -1,7 +1,7 @@
 #' Bird Location Data
 #' 
 #' Example bird location data using ATLAS in Harod Valley, Israel. 
-#' There are 18 populations of 17 avian species, mostly in the 7-21 range,
+#' There are 18 populations of 17 avian species, mostly in the 5-21 range,
 #' with one large Spur-Winged Lapwing (Vanellus spinosus) with 63 individuals.
 #' Note that the locations are in Israel Transverse Mercator (ITM) - https://en.wikipedia.org/wiki/Israeli_Transverse_Mercator
 #'
