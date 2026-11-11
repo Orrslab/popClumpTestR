@@ -6,7 +6,7 @@
 #' Note that the locations are in Israel Transverse Mercator (ITM) - https://en.wikipedia.org/wiki/Israeli_Transverse_Mercator
 #'
 #' @format ## `bird.location.data`
-#' A data frame with 247 rows (of 18 populations of 17 avian species) and 3 columns:
+#' A data frame with 250 rows (of 18 populations of 17 avian species) and 3 columns:
 #' \describe{
 #'   \item{POPULATION}{Population name, in format "SPECIES AMOUNT"}
 #'   \item{X}{X of centroid of the individual (in ITM)}
